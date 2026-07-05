@@ -95,4 +95,40 @@ CREATE TABLE IF NOT EXISTS chatbot_rules (
 );
 `);
 
+// ------------------------------------------------------------------
+// Seed a default company + admin login on every boot, if none exists.
+// This exists because free-tier hosting (e.g. Render's free plan) wipes
+// the SQLite file on restart/sleep - re-seeding on startup means you
+// always have a working login even after the disk gets reset.
+// Override via env vars if you want different default credentials.
+// ------------------------------------------------------------------
+const bcrypt = require('bcryptjs');
+const { v4: uuidv4 } = require('uuid');
+
+function seedDefaultAccount() {
+  const userCount = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
+  if (userCount > 0) return;
+
+  const companyName = process.env.SEED_COMPANY_NAME || 'Rebin Infotech';
+  const name = process.env.SEED_ADMIN_NAME || 'Admin';
+  const email = process.env.SEED_ADMIN_EMAIL || 'admin@rebininfotech.com';
+  const password = process.env.SEED_ADMIN_PASSWORD || 'RebinChat@123';
+
+  const tenantId = uuidv4();
+  const userId = uuidv4();
+  const passwordHash = bcrypt.hashSync(password, 10);
+
+  db.prepare('INSERT INTO tenants (id, company_name) VALUES (?, ?)').run(tenantId, companyName);
+  db.prepare(
+    'INSERT INTO users (id, tenant_id, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(userId, tenantId, name, email, passwordHash, 'admin');
+
+  console.log('\n  Seeded default RebinChat login:');
+  console.log(`    Email:    ${email}`);
+  console.log(`    Password: ${password}`);
+  console.log('  Change this password after logging in (or set SEED_ADMIN_* env vars before deploying).\n');
+}
+
+seedDefaultAccount();
+
 module.exports = db;

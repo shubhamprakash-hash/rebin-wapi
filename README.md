@@ -36,7 +36,29 @@ cp .env.example .env
 npm start
 ```
 
-Open **http://localhost:4000** → click **"Create company"** → you're in.
+Open **http://localhost:4000** and log in with the default account that's created automatically on first run:
+
+```
+Email:    admin@rebininfotech.com
+Password: RebinChat@123
+```
+
+**Change this password** (or better, set your own via environment variables before deploying — see below) since it's a known default.
+
+You can also just click **"Create company"** to make a separate account instead of using the seeded one.
+
+### Why there's a default login at all
+
+Free hosting tiers (like Render's free plan) wipe the database file on every restart/sleep, since there's no persistent disk. Rather than ship a database file that would just get erased again, RebinChat re-creates this one default admin account automatically **every time the server starts**, if no accounts exist yet. That means you always have a working login even after a restart — but it also means anything else you added (contacts, conversations, other team members) is lost on restart until you attach real persistent storage (see "Scaling up" below).
+
+To set your own default credentials instead of the built-in ones, add these environment variables (in `.env` locally, or in Render's Environment tab):
+
+```
+SEED_COMPANY_NAME=Rebin Infotech
+SEED_ADMIN_NAME=Your Name
+SEED_ADMIN_EMAIL=you@yourcompany.com
+SEED_ADMIN_PASSWORD=a-strong-password
+```
 
 That's it — the dashboard, inbox, contacts, campaigns, chatbot and templates screens all work immediately. The only thing left is connecting a real WhatsApp number, which takes one more step:
 
