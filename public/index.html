@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RebinChat — WhatsApp Business Platform</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+  <!-- AUTH SCREEN -->
+  <div id="auth-screen" class="auth-screen">
+    <div class="auth-card">
+      <div class="brand">
+        <div class="brand-mark">RC</div>
+        <div class="brand-name">RebinChat</div>
+      </div>
+      <p class="brand-tag">by Rebin Infotech</p>
+
+      <div id="auth-tabs" class="auth-tabs">
+        <button class="tab-btn active" data-tab="login">Log in</button>
+        <button class="tab-btn" data-tab="signup">Create company</button>
+      </div>
+
+      <form id="login-form" class="auth-form">
+        <label>Email</label>
+        <input type="email" id="login-email" required />
+        <label>Password</label>
+        <input type="password" id="login-password" required />
+        <button type="submit" class="btn-primary">Log in</button>
+        <p class="auth-error" id="login-error"></p>
+      </form>
+
+      <form id="signup-form" class="auth-form hidden">
+        <label>Company name</label>
+        <input type="text" id="signup-company" required />
+        <label>Your name</label>
+        <input type="text" id="signup-name" required />
+        <label>Email</label>
+        <input type="email" id="signup-email" required />
+        <label>Password</label>
+        <input type="password" id="signup-password" required minlength="6" />
+        <button type="submit" class="btn-primary">Create account</button>
+        <p class="auth-error" id="signup-error"></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- APP SHELL -->
+  <div id="app-shell" class="app-shell hidden">
+    <aside class="sidebar">
+      <div class="brand small">
+        <div class="brand-mark">RC</div>
+        <div class="brand-name">RebinChat</div>
+      </div>
+      <nav class="nav">
+        <button class="nav-item active" data-view="dashboard">Dashboard</button>
+        <button class="nav-item" data-view="inbox">Inbox</button>
+        <button class="nav-item" data-view="contacts">Contacts</button>
+        <button class="nav-item" data-view="campaigns">Campaigns</button>
+        <button class="nav-item" data-view="templates">Templates</button>
+        <button class="nav-item" data-view="chatbot">Chatbot</button>
+        <button class="nav-item" data-view="settings">Settings</button>
+      </nav>
+      <div class="sidebar-footer">
+        <div id="company-name" class="company-name"></div>
+        <button id="logout-btn" class="btn-link">Log out</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div id="connection-banner" class="banner hidden">
+        WhatsApp is not connected yet — go to <b>Settings</b> to connect a number before messaging works.
+      </div>
+      <div id="view-container" class="view-container"></div>
+    </main>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
