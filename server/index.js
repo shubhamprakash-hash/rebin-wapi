@@ -43,11 +43,29 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
+// Catch-all error handler - ensures API errors always come back as JSON,
+// not Express's default HTML error page (which broke the frontend's
+// error parsing and showed a generic "Request failed" message).
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: err.message || 'Internal server error' });
+});
+
 const server = http.createServer(app);
 initSocket(server);
 
+const db = require('./db');
 const PORT = process.env.PORT || 4000;
-server.listen(PORT, () => {
-  console.log(`\n  RebinChat is running at http://localhost:${PORT}\n`);
-  console.log(`  Webhook callback URL to give Meta: http://<your-domain>/api/webhook\n`);
-});
+
+db.ready
+  .then(() => {
+    server.listen(PORT, () => {
+      console.log(`\n  RebinChat is running at http://localhost:${PORT}\n`);
+      console.log(`  Webhook callback URL to give Meta: http://<your-domain>/api/webhook\n`);
+    });
+  })
+  .catch((err) => {
+    console.error('Failed to initialize database - server not started:', err);
+    process.exit(1);
+  });

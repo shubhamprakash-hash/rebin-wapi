@@ -13,8 +13,17 @@ function api(path, options = {}) {
   if (!(options.body instanceof FormData)) headers['Content-Type'] = 'application/json';
   if (state.token) headers['Authorization'] = 'Bearer ' + state.token;
   return fetch('/api' + path, Object.assign({}, options, { headers })).then(async (r) => {
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(data.error || 'Request failed');
+    let data = {};
+    let parseFailed = false;
+    try {
+      data = await r.json();
+    } catch (e) {
+      parseFailed = true;
+    }
+    if (!r.ok) {
+      const message = data.error || (parseFailed ? `Server error (HTTP ${r.status}) - check server logs` : 'Request failed');
+      throw new Error(message);
+    }
     return data;
   });
 }

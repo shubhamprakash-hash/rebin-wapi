@@ -1,14 +1,14 @@
-const Database = require('better-sqlite3');
-const path = require('path');
+const initSqlJs = require('sql.js');
 const fs = require('fs');
+const path = require('path');
+const bcrypt = require('bcryptjs');
+const { v4: uuidv4 } = require('uuid');
 
 const dataDir = path.join(__dirname, '..', 'data');
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+const dbFile = path.join(dataDir, 'rebinchat.sqlite');
 
-const db = new Database(path.join(dataDir, 'rebinchat.db'));
-db.pragma('journal_mode = WAL');
-
-db.exec(`
+const SCHEMA = `
 CREATE TABLE IF NOT EXISTS tenants (
   id TEXT PRIMARY KEY,
   company_name TEXT NOT NULL,
@@ -53,11 +53,11 @@ CREATE TABLE IF NOT EXISTS messages (
   id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL,
   conversation_id TEXT NOT NULL,
-  direction TEXT NOT NULL, -- inbound | outbound
+  direction TEXT NOT NULL,
   wa_message_id TEXT,
   msg_type TEXT DEFAULT 'text',
   body TEXT,
-  status TEXT DEFAULT 'sent', -- sent | delivered | read | failed
+  status TEXT DEFAULT 'sent',
   created_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -93,20 +93,71 @@ CREATE TABLE IF NOT EXISTS chatbot_rules (
   is_active INTEGER DEFAULT 1,
   created_at TEXT DEFAULT (datetime('now'))
 );
-`);
+`;
 
-// ------------------------------------------------------------------
-// Seed a default company + admin login on every boot, if none exists.
-// This exists because free-tier hosting (e.g. Render's free plan) wipes
-// the SQLite file on restart/sleep - re-seeding on startup means you
-// always have a working login even after the disk gets reset.
-// Override via env vars if you want different default credentials.
-// ------------------------------------------------------------------
-const bcrypt = require('bcryptjs');
-const { v4: uuidv4 } = require('uuid');
+// dbApi is exported immediately (same object reference always) so route
+// files can safely `require('../db')` at the top of their file. Its methods
+// are filled in once the WASM engine finishes loading (see `ready` below).
+// As long as the HTTP server doesn't start accepting requests until `ready`
+// resolves (handled in server/index.js), every route call is safe.
+const dbApi = {
+  prepare: null,
+  exec: null,
+  transaction: null,
+  ready: null
+};
+
+let sqlDb;
+
+function persist() {
+  try {
+    const data = sqlDb.export();
+    fs.writeFileSync(dbFile, Buffer.from(data));
+  } catch (e) {
+    console.error('Failed to persist database to disk:', e.message);
+  }
+}
+
+function wrapStatement(sql) {
+  return {
+    run(...params) {
+      const stmt = sqlDb.prepare(sql);
+      try {
+        stmt.bind(params);
+        stmt.step();
+      } finally {
+        stmt.free();
+      }
+      persist();
+      return { changes: sqlDb.getRowsModified() };
+    },
+    get(...params) {
+      const stmt = sqlDb.prepare(sql);
+      let row;
+      try {
+        stmt.bind(params);
+        if (stmt.step()) row = stmt.getAsObject();
+      } finally {
+        stmt.free();
+      }
+      return row;
+    },
+    all(...params) {
+      const stmt = sqlDb.prepare(sql);
+      const rows = [];
+      try {
+        stmt.bind(params);
+        while (stmt.step()) rows.push(stmt.getAsObject());
+      } finally {
+        stmt.free();
+      }
+      return rows;
+    }
+  };
+}
 
 function seedDefaultAccount() {
-  const userCount = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
+  const userCount = dbApi.prepare('SELECT COUNT(*) as c FROM users').get().c;
   if (userCount > 0) return;
 
   const companyName = process.env.SEED_COMPANY_NAME || 'Rebin Infotech';
@@ -118,10 +169,10 @@ function seedDefaultAccount() {
   const userId = uuidv4();
   const passwordHash = bcrypt.hashSync(password, 10);
 
-  db.prepare('INSERT INTO tenants (id, company_name) VALUES (?, ?)').run(tenantId, companyName);
-  db.prepare(
-    'INSERT INTO users (id, tenant_id, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(userId, tenantId, name, email, passwordHash, 'admin');
+  dbApi.prepare('INSERT INTO tenants (id, company_name) VALUES (?, ?)').run(tenantId, companyName);
+  dbApi
+    .prepare('INSERT INTO users (id, tenant_id, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(userId, tenantId, name, email, passwordHash, 'admin');
 
   console.log('\n  Seeded default RebinChat login:');
   console.log(`    Email:    ${email}`);
@@ -129,6 +180,36 @@ function seedDefaultAccount() {
   console.log('  Change this password after logging in (or set SEED_ADMIN_* env vars before deploying).\n');
 }
 
-seedDefaultAccount();
+dbApi.ready = (async () => {
+  const SQL = await initSqlJs();
 
-module.exports = db;
+  if (fs.existsSync(dbFile)) {
+    try {
+      sqlDb = new SQL.Database(fs.readFileSync(dbFile));
+    } catch (e) {
+      console.error('Existing database file was unreadable, starting fresh:', e.message);
+      sqlDb = new SQL.Database();
+    }
+  } else {
+    sqlDb = new SQL.Database();
+  }
+
+  sqlDb.run(SCHEMA);
+
+  dbApi.prepare = wrapStatement;
+  dbApi.exec = (sql) => sqlDb.run(sql);
+  // Simple transaction helper matching the subset used by the routes:
+  // db.transaction(fn) returns a function you call with an array of rows.
+  dbApi.transaction = (fn) => (rows) => {
+    const result = fn(rows);
+    persist();
+    return result;
+  };
+
+  seedDefaultAccount();
+  persist();
+
+  console.log('  Database ready (sql.js / SQLite, file-backed at data/rebinchat.sqlite)');
+})();
+
+module.exports = dbApi;

@@ -98,7 +98,7 @@ RebinChat/
 │   └── routes/                # auth, whatsapp, webhook, inbox, contacts,
 │                               # templates, campaigns, chatbot, analytics
 ├── public/                    # Dashboard frontend (plain HTML/CSS/JS — no build step)
-├── data/rebinchat.db          # SQLite database (created automatically on first run)
+├── data/rebinchat.sqlite       # SQLite database (created automatically on first run)
 └── .env                       # Your config (copy from .env.example)
 ```
 
@@ -106,11 +106,15 @@ RebinChat/
 
 Every signup creates one **tenant** (the client company) and one admin **user**. All data — contacts, conversations, messages, campaigns, templates, chatbot rules — is scoped by `tenant_id`, and every API route checks the JWT's `tenantId` before reading or writing. You (Rebin Infotech) run one instance of this app; each client that signs up gets their own isolated workspace and connects their own WhatsApp number to it, exactly as described in the blueprint's architecture diagram.
 
+### A note on the database engine
+
+RebinChat uses **[sql.js](https://sql.js.org)** — real SQLite compiled to pure WebAssembly. Unlike `better-sqlite3` (a native C++ module some hosts fail to compile due to Node/V8 version mismatches), sql.js needs no compiler at all and runs identically everywhere, which is why it was chosen here after running into exactly that build failure on Render. The trade-off: the whole database lives in memory while the server runs and is flushed to `data/rebinchat.sqlite` after every write, so on free hosting tiers with ephemeral disks, data still doesn't survive a restart (see the seeded default login above, and the Postgres note below for a permanent fix).
+
 ## Scaling up later
 
 The blueprint's own roadmap treats these as later-stage upgrades, and the code is structured so they drop in without a rewrite:
 
-- **Postgres instead of SQLite**: swap `server/db.js` for a `pg` connection pool; the SQL is close to standard already.
+- **Postgres instead of SQLite**: swap `server/db.js` for a `pg` connection pool — this is also the fix for the ephemeral-disk data loss on free hosting tiers. The SQL used throughout the app is close to standard already.
 - **Redis + BullMQ for broadcast queueing**: replace the in-process `setTimeout` loop in `routes/campaigns.js` with a BullMQ queue + worker.
 - **Billing**: add a Stripe/Razorpay subscription webhook that flips `tenants.plan`; the pricing tiers table from the blueprint maps directly to plan values already stored per tenant.
 - **Becoming a WhatsApp BSP**: only needed if you move to message-level billing — not required for the SaaS-subscription model this app implements.
